@@ -27,25 +27,45 @@ int main() {
 
     CloseHandle(hProcessSnap);
 
-    LPCSTR DllPath = "D:\\projects\\standardinjection\\release\\testlib.dll";
-    
+    LPCSTR DllPath = "C:\\Users\\miron\\Downloads\\test.dll";
+
     INT process_id;
     std::cout << "[+] Input Process_Id for inject DLL " << std::endl;
     std::cin >> process_id;
-    HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, process_id);
 
+    HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, process_id);
+    if (hProcess == NULL) {
+        std::cout << hProcess << std::endl;
+        std::cerr << "Error: OpenProcess failed" << std::endl;
+        return 1;
+    }
 
     LPVOID pDllPath = VirtualAllocEx(hProcess, 0, strlen(DllPath) + 1,
         MEM_COMMIT, PAGE_READWRITE);
+    if (pDllPath == NULL) {
+        std::cerr << "Error: VirtualAllocEx failed" << std::endl;
+        CloseHandle(hProcess);
+        return 1;
+    }
 
-
-    WriteProcessMemory(hProcess, pDllPath, (LPVOID)DllPath,
-        strlen(DllPath) + 1, 0);
-
+    if (!WriteProcessMemory(hProcess, pDllPath, (LPVOID)DllPath,
+        strlen(DllPath) + 1, 0)) {
+        std::cerr << "Error: WriteProcessMemory failed" << std::endl;
+        VirtualFreeEx(hProcess, pDllPath, strlen(DllPath) + 1, MEM_RELEASE);
+        CloseHandle(hProcess);
+        return 1;
+    }
 
     HANDLE hLoadThread = CreateRemoteThread(hProcess, 0, 0,
         (LPTHREAD_START_ROUTINE)GetProcAddress(GetModuleHandleA("Kernel32.dll"),
             "LoadLibraryA"), pDllPath, 0, 0);
+
+    if (hLoadThread == NULL) {
+        std::cerr << "Error: CreateRemoteThread failed" << std::endl;
+        VirtualFreeEx(hProcess, pDllPath, strlen(DllPath) + 1, MEM_RELEASE);
+        CloseHandle(hProcess);
+        return 1;
+    }
 
     WaitForSingleObject(hLoadThread, INFINITE);
 
@@ -53,6 +73,7 @@ int main() {
     std::cin.get();
 
     VirtualFreeEx(hProcess, pDllPath, strlen(DllPath) + 1, MEM_RELEASE);
+    CloseHandle(hProcess);
 
     return 0;
 }
